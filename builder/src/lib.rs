@@ -1,62 +1,93 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Ident, parse_macro_input};
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Type, TypePath, Path};
 
 #[proc_macro_derive(Builder)]
 pub fn derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
+    // eprintln!("{:#?}", ast);
     let b_name = format!("{}Builder", name);
     let b_ident = Ident::new(&b_name, name.span());
 
-    let expand = quote!{
+    let fields = if let Data::Struct(DataStruct {
+        fields: Fields::Named(FieldsNamed { ref named, .. }),
+        ..
+    }) = ast.data
+    {
+        named
+    } else {
+        unimplemented!()
+    };
+
+    let optional = fields.iter().map(|f| {
+        let name = &f.ident;
+        let ty = &f.ty;
+        let ident = identifier(ty);
+        let value = if format!("{}", ident) == "Option" {
+            quote! {
+                #ty
+            }
+        } else {
+            quote! {
+                std::option::Option<#ty>
+            }
+        };
+        quote! { #name: #value }
+    });
+
+    let methods = fields.iter().map(|f| {
+        let name = &f.ident.clone().unwrap();
+        let ty = &f.ty;
+        quote! {
+            pub fn #name(&mut self, #name: #ty) -> &mut Self {
+                self.#name = Some(#name);
+                self
+            }
+        }
+    });
+    let builder_method = fields.iter().map(|f|{
+        let name = &f.ident;
+        quote! { #name: None }
+    });
+    let build = fields.iter().map(|f|{
+        let name = &f.ident;
+        let ty = &f.ty;
+        let ident = identifier(ty);
+
+        let value = if format!("{}", ident) == "Option" {
+            quote! {
+                self.#name
+            }
+        } else {
+            quote! {
+                self.#name.clone().unwrap_or_default()
+            }
+        };
+        quote! { #name: #value }
+    });
+
+    let expand = quote! {
         use std::error::Error;
 
         #[derive(Clone)]
         pub struct #b_ident {
-            executable: Option<String>,
-            args: Option<Vec<String>>,
-            env: Option<Vec<String>>,
-            current_dir: Option<String>,
+            #(#optional,)*
         }
 
         impl #b_ident {
-            pub fn build(&mut self) -> Result<Command, Box<dyn Error>> {
-                Ok(Command {
-                    executable: self.executable.clone().unwrap_or_default(),
-                    args: self.args.clone().unwrap_or_default(),
-                    env: self.env.clone().unwrap_or_default(),
-                    current_dir: self.current_dir.clone().unwrap_or_default(),
+            pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
+                Ok(#name {
+                    #(#build,)*
                 })
             }
-            fn executable(&mut self, str: String) -> &mut Self {
-                self.executable = Some(str);
-                self
-            }
-
-            fn args(&mut self, vec: Vec<String>) -> &mut Self {
-                self.args = Some(vec);
-                self
-            }
-
-            fn env(&mut self, vec: Vec<String>) -> &mut Self {
-                self.env = Some(vec);
-                self
-            }
-
-            fn current_dir(&mut self, str: String) -> &mut Self {
-                self.current_dir = Some(str);
-                self
-            }
+            #(#methods)*
         }
 
         impl #name {
             fn builder() -> #b_ident {
                 #b_ident {
-                    executable: None,
-                    args: None,
-                    env: None,
-                    current_dir: None,
+                    #(#builder_method,)*
                 }
             }
         }
@@ -64,37 +95,10 @@ pub fn derive(input: TokenStream) -> TokenStream {
     TokenStream::from(expand)
 }
 
-/*
-
-02-create-builder.rs
-
-#[proc_macro_derive(Builder)]
-pub fn derive(input: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(input as DeriveInput);
-    let name = ast.ident;
-
-    let expand = quote!{
-        impl #name {
-            fn builder() {}
-        }
-    };
-    TokenStream::from(expand)
+fn identifier(ty: &Type) -> &Ident {
+    if let Type::Path(TypePath {path: Path{segments, ..}, ..}) = ty {
+        &segments.iter().next().unwrap().ident
+    } else {
+        unimplemented!()
+    }
 }
-*/
-
-/*
-
-01-parse.rs
-
-use proc_macro::TokenStream;
-use syn::{DeriveInput, parse_macro_input};
-
-#[proc_macro_derive(Builder)]
-pub fn derive(input: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(input as DeriveInput);
-    eprintln!("{:?}", ast);
-
-    TokenStream::new()
-}
-
-*/
