@@ -1,3 +1,5 @@
+extern crate proc_macro;
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Type, TypePath, Path};
@@ -39,8 +41,18 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let methods = fields.iter().map(|f| {
         let name = &f.ident.clone().unwrap();
         let ty = &f.ty;
+        let ident = identifier(ty);
+        let value = if format!("{}", ident) == "Option" {
+            quote! {
+                String
+            }
+        } else {
+            quote! {
+                #ty
+            }
+        };
         quote! {
-            pub fn #name(&mut self, #name: #ty) -> &mut Self {
+            pub fn #name(&mut self, #name: #value) -> &mut Self {
                 self.#name = Some(#name);
                 self
             }
@@ -57,7 +69,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
         let value = if format!("{}", ident) == "Option" {
             quote! {
-                self.#name
+                self.#name.clone()
             }
         } else {
             quote! {
