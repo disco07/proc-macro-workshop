@@ -2,7 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Type, TypePath, Path};
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Type, TypePath, Path, PathArguments, GenericArgument, AngleBracketedGenericArguments};
 
 #[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -43,8 +43,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
         let ty = &f.ty;
         let ident = identifier(ty);
         let value = if format!("{}", ident) == "Option" {
+            let id = types(ty).unwrap();
             quote! {
-                String
+                #id
             }
         } else {
             quote! {
@@ -112,5 +113,26 @@ fn identifier(ty: &Type) -> &Ident {
         &segments.iter().next().unwrap().ident
     } else {
         unimplemented!()
+    }
+}
+
+fn types(ty: &Type) -> Option<&Type> {
+    if let Type::Path(TypePath {path: Path{segments, ..}, ..}) = ty {
+        let arguments = &segments.iter().next().unwrap().arguments;
+        match arguments {
+            PathArguments::AngleBracketed(AngleBracketedGenericArguments {args, ..}) => {
+                let angle = args.iter().next().unwrap();
+                match angle {
+                    GenericArgument::Type(types) => {
+                        Some(types)
+                    }
+                    _ => None
+                }
+
+            }
+            _ => None
+        }
+    } else {
+        None
     }
 }
