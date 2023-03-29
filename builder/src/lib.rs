@@ -2,7 +2,7 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Type, TypePath, Path, PathArguments, GenericArgument, AngleBracketedGenericArguments};
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Fields, FieldsNamed, Ident, Type, TypePath, Path, PathArguments, GenericArgument, AngleBracketedGenericArguments, PathSegment};
 
 #[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -17,58 +17,47 @@ pub fn derive(input: TokenStream) -> TokenStream {
         ..
     }) = ast.data
     {
-        named
+        Some(named)
     } else {
-        unimplemented!()
+        None
     };
+    assert!(fields.is_some());
 
-    let optional = fields.iter().map(|f| {
+    let optional = fields.unwrap().iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
-        let ident = identifier(ty);
-        let value = if format!("{}", ident) == "Option" {
-            quote! {
-                #ty
-            }
+        return if inner_type(ty, "Option").is_some() {
+            quote! { #name: #ty }
         } else {
-            quote! {
-                std::option::Option<#ty>
-            }
+            quote! { #name: std::option::Option<#ty> }
         };
-        quote! { #name: #value }
     });
 
-    let methods = fields.iter().map(|f| {
+    let methods = fields.unwrap().iter().map(|f| {
         let name = &f.ident.clone().unwrap();
-        let ty = &f.ty;
-        let ident = identifier(ty);
-        let value = if format!("{}", ident) == "Option" {
-            let id = types(ty).unwrap();
-            quote! {
-                #id
-            }
-        } else {
-            quote! {
-                #ty
-            }
-        };
+        let mut ty = &f.ty;
+        if let Some(inner_ty) = inner_type(ty, "Option") {
+            ty = inner_ty;
+        }
         quote! {
-            pub fn #name(&mut self, #name: #value) -> &mut Self {
+            pub fn #name(&mut self, #name: #ty) -> &mut Self {
                 self.#name = Some(#name);
                 self
             }
         }
+
+
     });
-    let builder_method = fields.iter().map(|f|{
+
+    let builder_method = fields.unwrap().iter().map(|f|{
         let name = &f.ident;
         quote! { #name: None }
     });
-    let build = fields.iter().map(|f|{
+    let build = fields.unwrap().iter().map(|f|{
         let name = &f.ident;
         let ty = &f.ty;
-        let ident = identifier(ty);
 
-        let value = if format!("{}", ident) == "Option" {
+        let value = if inner_type(ty, "Option").is_some() {
             quote! {
                 self.#name.clone()
             }
@@ -108,31 +97,19 @@ pub fn derive(input: TokenStream) -> TokenStream {
     TokenStream::from(expand)
 }
 
-fn identifier(ty: &Type) -> &Ident {
+fn inner_type<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
     if let Type::Path(TypePath {path: Path{segments, ..}, ..}) = ty {
-        &segments.iter().next().unwrap().ident
-    } else {
-        unimplemented!()
-    }
-}
-
-fn types(ty: &Type) -> Option<&Type> {
-    if let Type::Path(TypePath {path: Path{segments, ..}, ..}) = ty {
-        let arguments = &segments.iter().next().unwrap().arguments;
-        match arguments {
-            PathArguments::AngleBracketed(AngleBracketedGenericArguments {args, ..}) => {
-                let angle = args.iter().next().unwrap();
-                match angle {
-                    GenericArgument::Type(types) => {
-                        Some(types)
-                    }
-                    _ => None
-                }
-
+        if let Some(PathSegment {ident, arguments}) = segments.iter().next() {
+            if ident != wrapper {
+                return None;
             }
-            _ => None
+            if let PathArguments::AngleBracketed(AngleBracketedGenericArguments {args, ..}) = arguments {
+                if let Some(GenericArgument::Type(ref inner_type)) = args.iter().next() {
+                    return Some(inner_type);
+                }
+            }
         }
-    } else {
-        None
     }
+
+    None
 }
