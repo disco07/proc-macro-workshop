@@ -14,7 +14,7 @@ use syn::{
 pub fn derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
-    eprintln!("{:#?}", ast);
+    // eprintln!("{:#?}", ast);
     let b_name = format!("{}Builder", name);
     let b_ident = Ident::new(&b_name, name.span());
 
@@ -45,15 +45,16 @@ pub fn derive(input: TokenStream) -> TokenStream {
         if let Some(inner_ty) = inner_type(ty, "Option") {
             ty = inner_ty;
         }
+        let q = create_method(f, name);
+
         quote! {
             pub fn #name(&mut self, #name: #ty) -> &mut Self {
                 self.#name = Some(#name);
                 self
             }
+            #q
         }
     });
-
-    let extract_methods = fields.unwrap().iter().map(|f| create_method(f));
 
     let builder_method = fields.unwrap().iter().map(|f| {
         let name = &f.ident;
@@ -90,8 +91,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
                 })
             }
             #(#methods)*
-
-            #(#extract_methods)*
         }
 
         impl #name {
@@ -124,7 +123,7 @@ fn get_attrs<'a>(field: &'a Field, attribute: &str) -> Option<&'a Attribute> {
     None
 }
 
-fn create_method(field: &Field) -> proc_macro2::TokenStream {
+fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
     if let Some(Attribute {
         meta: Meta::List(MetaList { tokens, .. }),
         ..
@@ -146,12 +145,20 @@ fn create_method(field: &Field) -> proc_macro2::TokenStream {
         match literal {
             Lit::Str(s) => {
                 let ident = Ident::new(&s.value(), field.span());
-                let ty = &field.ty;
-                return quote! {
-                    pub fn #ident(&mut self, #ident: #ty) -> &mut Self {
-                        self
-                    }
-                };
+                if *i != ident {
+                    let name = &field.ident.as_ref().unwrap();
+                    let ty = inner_type(&field.ty, "Vec").unwrap();
+                    return quote! {
+                        pub fn #ident(&mut self, #ident: #ty) -> &mut Self {
+                            if let Some(ref mut value) = self.#name {
+                                value.push(#ident);
+                            } else {
+                                self.#name = Some(vec![#ident]);
+                            }
+                            self
+                        }
+                    };
+                }
             }
             _ => unimplemented!(),
         }
