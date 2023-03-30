@@ -125,30 +125,32 @@ fn get_attrs<'a>(field: &'a Field, attribute: &str) -> Option<&'a Attribute> {
 
 fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
     if let Some(Attribute {
-        meta: Meta::List(MetaList { tokens, .. }),
+        meta,
         ..
     }) = get_attrs(field, "builder")
     {
-        match tokens.clone().into_iter().nth(0).unwrap() {
-            TokenTree::Ident(i) => assert_eq!(i, "each"),
-            tt => panic!("expected each found {}", tt),
-        }
-        match tokens.clone().into_iter().nth(1).unwrap() {
-            TokenTree::Punct(p) => assert_eq!(p.as_char(), '='),
-            tt => panic!("expected '=' found {}", tt),
-        }
-        let literal = match tokens.clone().into_iter().nth(2).unwrap() {
-            TokenTree::Literal(l) => Lit::new(l),
-            tt => panic!("found {}", tt),
-        };
+        if let Meta::List(MetaList { tokens, .. }) = meta {
+            if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().nth(0) {
+                if i != "each" {
+                    return syn::Error::new_spanned(meta, "expected `builder(each = \"...\")`").to_compile_error();
+                }
+            }
+            match tokens.clone().into_iter().nth(1).unwrap() {
+                TokenTree::Punct(p) => assert_eq!(p.as_char(), '='),
+                tt => panic!("expected '=' found {}", tt),
+            }
+            let literal = match tokens.clone().into_iter().nth(2).unwrap() {
+                TokenTree::Literal(l) => Lit::new(l),
+                tt => panic!("found {}", tt),
+            };
 
-        match literal {
-            Lit::Str(s) => {
-                let ident = Ident::new(&s.value(), field.span());
-                if *i != ident {
-                    let name = &field.ident.as_ref().unwrap();
-                    let ty = inner_type(&field.ty, "Vec").unwrap();
-                    return quote! {
+            match literal {
+                Lit::Str(s) => {
+                    let ident = Ident::new(&s.value(), field.span());
+                    if *i != ident {
+                        let name = &field.ident.as_ref().unwrap();
+                        let ty = inner_type(&field.ty, "Vec").unwrap();
+                        return quote! {
                         pub fn #ident(&mut self, #ident: #ty) -> &mut Self {
                             if let Some(ref mut value) = self.#name {
                                 value.push(#ident);
@@ -158,9 +160,10 @@ fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
                             self
                         }
                     };
+                    }
                 }
+                _ => unimplemented!(),
             }
-            _ => unimplemented!(),
         }
     }
 
