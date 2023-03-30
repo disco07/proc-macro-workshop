@@ -14,7 +14,6 @@ use syn::{
 pub fn derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
     let name = &ast.ident;
-    // eprintln!("{:#?}", ast);
     let b_name = format!("{}Builder", name);
     let b_ident = Ident::new(&b_name, name.span());
 
@@ -78,6 +77,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     let expand = quote! {
         use std::error::Error;
+        extern crate alloc;
 
         #[derive(Clone)]
         pub struct #b_ident {
@@ -85,7 +85,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
 
         impl #b_ident {
-            pub fn build(&mut self) -> Result<#name, Box<dyn Error>> {
+            pub fn build(&mut self) -> std::result::Result<#name, alloc::boxed::Box<dyn Error>> {
                 Ok(#name {
                     #(#build,)*
                 })
@@ -124,15 +124,12 @@ fn get_attrs<'a>(field: &'a Field, attribute: &str) -> Option<&'a Attribute> {
 }
 
 fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
-    if let Some(Attribute {
-        meta,
-        ..
-    }) = get_attrs(field, "builder")
-    {
+    if let Some(Attribute { meta, .. }) = get_attrs(field, "builder") {
         if let Meta::List(MetaList { tokens, .. }) = meta {
             if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().nth(0) {
                 if i != "each" {
-                    return syn::Error::new_spanned(meta, "expected `builder(each = \"...\")`").to_compile_error();
+                    return syn::Error::new_spanned(meta, "expected `builder(each = \"...\")`")
+                        .to_compile_error();
                 }
             }
             match tokens.clone().into_iter().nth(1).unwrap() {
@@ -151,15 +148,15 @@ fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
                         let name = &field.ident.as_ref().unwrap();
                         let ty = inner_type(&field.ty, "Vec").unwrap();
                         return quote! {
-                        pub fn #ident(&mut self, #ident: #ty) -> &mut Self {
-                            if let Some(ref mut value) = self.#name {
-                                value.push(#ident);
-                            } else {
-                                self.#name = Some(vec![#ident]);
+                            pub fn #ident(&mut self, #ident: #ty) -> &mut Self {
+                                if let Some(ref mut value) = self.#name {
+                                    value.push(#ident);
+                                } else {
+                                    self.#name = Some(vec![#ident]);
+                                }
+                                self
                             }
-                            self
-                        }
-                    };
+                        };
                     }
                 }
                 _ => unimplemented!(),
