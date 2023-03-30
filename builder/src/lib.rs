@@ -85,7 +85,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
 
         impl #b_ident {
-            pub fn build(&mut self) -> std::result::Result<#name, alloc::boxed::Box<dyn Error>> {
+            pub fn build(&mut self) -> std::result::Result<#name, std::boxed::Box<dyn Error>> {
                 Ok(#name {
                     #(#build,)*
                 })
