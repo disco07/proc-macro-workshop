@@ -1,10 +1,14 @@
 extern crate proc_macro;
 
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
 use proc_macro2::TokenTree;
 use quote::quote;
-use syn::{parse_macro_input, AngleBracketedGenericArguments, Data, DataStruct, DeriveInput, Fields, FieldsNamed, GenericArgument, Ident, Path, PathArguments, PathSegment, Type, TypePath, Attribute, Field, Meta, MetaList, Lit};
 use syn::spanned::Spanned;
+use syn::{
+    parse_macro_input, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput,
+    Field, Fields, FieldsNamed, GenericArgument, Ident, Lit, Meta, MetaList, Path, PathArguments,
+    PathSegment, Type, TypePath,
+};
 
 #[proc_macro_derive(Builder, attributes(builder))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -49,9 +53,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     });
 
-    let extract_methods = fields.unwrap().iter().map(|f| {
-        create_method(f)
-    });
+    let extract_methods = fields.unwrap().iter().map(|f| create_method(f));
 
     let builder_method = fields.unwrap().iter().map(|f| {
         let name = &f.ident;
@@ -104,13 +106,17 @@ pub fn derive(input: TokenStream) -> TokenStream {
 }
 
 fn get_attrs<'a>(field: &'a Field, attribute: &str) -> Option<&'a Attribute> {
-    while let Some(attr) = field.attrs.iter().next() {
-        if let Meta::List(MetaList {path: Path{segments,..}, .. }) = &attr.meta {
-            if let Some(PathSegment{ident, ..}) = segments.iter().next() {
+    while let Some(attr) = field.attrs.first() {
+        if let Meta::List(MetaList {
+            path: Path { segments, .. },
+            ..
+        }) = &attr.meta
+        {
+            if let Some(PathSegment { ident, .. }) = segments.iter().next() {
                 if ident != attribute {
                     return None;
                 }
-                return Some(attr)
+                return Some(attr);
             }
         }
     }
@@ -119,18 +125,22 @@ fn get_attrs<'a>(field: &'a Field, attribute: &str) -> Option<&'a Attribute> {
 }
 
 fn create_method(field: &Field) -> proc_macro2::TokenStream {
-    if let Some(Attribute {meta: Meta::List(MetaList { tokens, .. }), ..}) = get_attrs(field, "builder") {
+    if let Some(Attribute {
+        meta: Meta::List(MetaList { tokens, .. }),
+        ..
+    }) = get_attrs(field, "builder")
+    {
         match tokens.clone().into_iter().nth(0).unwrap() {
             TokenTree::Ident(i) => assert_eq!(i, "each"),
-            tt=> panic!("expected each found {}", tt)
+            tt => panic!("expected each found {}", tt),
         }
         match tokens.clone().into_iter().nth(1).unwrap() {
             TokenTree::Punct(p) => assert_eq!(p.as_char(), '='),
-            tt=> panic!("expected '=' found {}", tt)
+            tt => panic!("expected '=' found {}", tt),
         }
         let literal = match tokens.clone().into_iter().nth(2).unwrap() {
             TokenTree::Literal(l) => Lit::new(l),
-            tt => panic!("found {}", tt)
+            tt => panic!("found {}", tt),
         };
 
         match literal {
@@ -143,7 +153,7 @@ fn create_method(field: &Field) -> proc_macro2::TokenStream {
                     }
                 };
             }
-            _ => unimplemented!()
+            _ => unimplemented!(),
         }
     }
 
