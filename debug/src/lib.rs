@@ -30,7 +30,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let expanded = quote!{
         impl std::fmt::Debug for #name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{} {{}}", #name_string, #method)
+                f.debug_struct(#name_string).
+                #(#method.)*
+                finish()
             }
         }
     };
