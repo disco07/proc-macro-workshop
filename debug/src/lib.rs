@@ -18,19 +18,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let binding = fields.unwrap();
     let method = binding.iter().map(|f| {
         let name = &f.ident.clone().unwrap();
-        let name_string = format!("{}", name);
         let _ty = &f.ty;
 
-        match get_attrs(f, "debug") {
-            None => {
-                quote! {
-                    field(#name_string, &self.#name)
-                }
-            }
-            Some(_) => {
-                create_field(f, name)
-            }
-        }
+        create_field(f, name)
     });
 
     let expanded = quote!{
@@ -63,12 +53,12 @@ fn get_attrs<'a>(field: &'a Field, attrs: &str) -> Option<&'a Attribute> {
 
 fn create_field(field: &Field, ident: &Ident) -> proc_macro2::TokenStream {
     let attr = get_attrs(field, "debug");
+    let name_string = format!("{}", ident);
     if let Some(Attribute{meta, ..}) = attr {
         if let Meta::NameValue(MetaNameValue { value: Expr::Lit(ExprLit { lit, .. }), .. }) = meta {
             match lit {
                 Lit::Str(s) => {
                     let t = s.token();
-                    let name_string = format!("{}", ident);
                     return quote! {
                         field(#name_string, &format_args!(#t, self.#ident))
                     }
@@ -77,5 +67,7 @@ fn create_field(field: &Field, ident: &Ident) -> proc_macro2::TokenStream {
             }
         }
     }
-    proc_macro2::TokenStream::new()
+    quote! {
+        field(#name_string, &self.#ident)
+    }
 }
