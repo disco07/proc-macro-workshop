@@ -145,7 +145,7 @@ fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
                 Lit::Str(s) => {
                     let ident = Ident::new(&s.value(), field.span());
                     if *i != ident {
-                        let name = &field.ident.as_ref().unwrap();
+                        let name = &field.ident.clone().unwrap();
                         let ty = inner_type(&field.ty, "Vec").unwrap();
                         return quote! {
                             pub fn #ident(&mut self, #ident: #ty) -> &mut Self {
