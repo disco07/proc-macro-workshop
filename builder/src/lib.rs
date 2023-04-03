@@ -166,7 +166,7 @@ fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
     proc_macro2::TokenStream::new()
 }
 
-fn inner_type<'a>(ty: &'a Type, wrapper: &str) -> std::option::Option::Option<&'a Type> {
+fn inner_type<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
     if let Type::Path(TypePath {
         path: Path { segments, .. },
         ..
