@@ -77,7 +77,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
     let expand = quote! {
         use std::error::Error;
-        extern crate alloc;
 
         #[derive(Clone)]
         pub struct #b_ident {
@@ -104,7 +103,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     expand.into()
 }
 
-fn get_attrs<'a>(field: &'a Field, attribute: &str) -> Option<&'a Attribute> {
+fn get_attrs<'a>(field: &'a Field, attribute: &str) -> std::option::Option::Option<&'a Attribute> {
     while let Some(attr) = field.attrs.first() {
         if let Meta::List(MetaList {
             path: Path { segments, .. },
@@ -128,7 +127,7 @@ fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
         if let Meta::List(MetaList { tokens, .. }) = meta {
             if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().nth(0) {
                 if i != "each" {
-                    return syn::Error::new_spanned(meta, "expected `builder(each = \"...\")`")
+                    return syn::Error::new_spanned(&meta, "expected `builder(each = \"...\")`")
                         .to_compile_error();
                 }
             }
@@ -149,10 +148,10 @@ fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
                         let ty = inner_type(&field.ty, "Vec").unwrap();
                         return quote! {
                             pub fn #ident(&mut self, #ident: #ty) -> &mut Self {
-                                if let Some(ref mut value) = self.#name {
+                                if let std::option::Option::Some(ref mut value) = self.#name {
                                     value.push(#ident);
                                 } else {
-                                    self.#name = Some(vec![#ident]);
+                                    self.#name = std::option::Option::Some(vec![#ident]);
                                 }
                                 self
                             }
@@ -167,7 +166,7 @@ fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
     proc_macro2::TokenStream::new()
 }
 
-fn inner_type<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
+fn inner_type<'a>(ty: &'a Type, wrapper: &str) -> std::option::Option::Option<&'a Type> {
     if let Type::Path(TypePath {
         path: Path { segments, .. },
         ..
