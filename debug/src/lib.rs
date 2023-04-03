@@ -1,6 +1,10 @@
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Attribute, Ident, Data, DataStruct, DeriveInput, Expr, ExprLit, Field, Fields, FieldsNamed, Lit, Meta, MetaNameValue, parse_macro_input, Path, PathSegment, Generics, GenericParam, parse_quote, Type, TypePath, PathArguments, AngleBracketedGenericArguments, GenericArgument};
+use syn::{
+    parse_macro_input, parse_quote, Attribute, Data, DataStruct,
+    DeriveInput, Expr, ExprLit, Field, Fields, FieldsNamed, GenericParam,
+    Generics, Ident, Lit, Meta, MetaNameValue, Path, PathSegment,
+};
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -8,7 +12,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
     // eprintln!("{:#?}", ast);
     let name = ast.ident;
     let name_string = format!("{}", name);
-    let fields = if let Data::Struct(DataStruct{fields: Fields::Named(FieldsNamed {named, ..}), ..}) = ast.data {
+    let fields = if let Data::Struct(DataStruct {
+        fields: Fields::Named(FieldsNamed { named, .. }),
+        ..
+    }) = ast.data
+    {
         Some(named)
     } else {
         None
@@ -41,13 +49,17 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
 fn get_attrs<'a>(field: &'a Field, attrs: &str) -> Option<&'a Attribute> {
     while let Some(attr) = field.attrs.first() {
-        if let Meta::NameValue(MetaNameValue {path: Path {segments, ..}, ..}) = &attr.meta {
-            if let Some(PathSegment{ident, .. }) = segments.first() {
+        if let Meta::NameValue(MetaNameValue {
+            path: Path { segments, .. },
+            ..
+        }) = &attr.meta
+        {
+            if let Some(PathSegment { ident, .. }) = segments.first() {
                 if ident != attrs {
                     return None;
                 }
 
-                return Some(attr)
+                return Some(attr);
             }
         }
     }
@@ -61,16 +73,20 @@ fn create_field(field: &Field, ident: &Ident) -> proc_macro2::TokenStream {
     // if ty.is_some() {
     //     return proc_macro2::TokenStream::new()
     // }
-    if let Some(Attribute{meta, ..}) = attr {
-        if let Meta::NameValue(MetaNameValue { value: Expr::Lit(ExprLit { lit, .. }), .. }) = meta {
+    if let Some(Attribute { meta, .. }) = attr {
+        if let Meta::NameValue(MetaNameValue {
+            value: Expr::Lit(ExprLit { lit, .. }),
+            ..
+        }) = meta
+        {
             match lit {
                 Lit::Str(s) => {
                     let t = s.token();
                     return quote! {
                         field(#name_string, &format_args!(#t, self.#ident))
-                    }
+                    };
                 }
-                _ => unimplemented!()
+                _ => unimplemented!(),
             }
         }
     }
