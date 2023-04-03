@@ -103,7 +103,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
     expand.into()
 }
 
-fn get_attrs<'a>(field: &'a Field, attribute: &str) -> std::option::Option::Option<&'a Attribute> {
+fn get_attrs<'a>(field: &'a Field, attribute: &str) -> Option<&'a Attribute> {
     while let Some(attr) = field.attrs.first() {
         if let Meta::List(MetaList {
             path: Path { segments, .. },
