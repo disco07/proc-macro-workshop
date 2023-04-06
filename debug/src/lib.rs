@@ -104,7 +104,7 @@ fn error_attr<T: ToTokens>(tokens: &T) -> Error {
     Error::new_spanned(tokens, "expected `builder(bound = \"...\")`")
 }
 
-fn get_bound_attrs(attrs: Vec<Attribute>) -> Result<Option<syn::WherePredicate>, Error> {
+fn get_bound_attrs(attrs: Vec<Attribute>) -> Result<Option<WherePredicate>, Error> {
     for attr in attrs {
         if let Meta::List(MetaList {
             ref tokens,
@@ -135,7 +135,7 @@ fn get_bound_attrs(attrs: Vec<Attribute>) -> Result<Option<syn::WherePredicate>,
             match literal {
                 Lit::Str(s) => {
                     let value = s.value();
-                    return match syn::parse_str::<syn::WherePredicate>(&value) {
+                    return match syn::parse_str::<WherePredicate>(&value) {
                         Ok(where_predicate) => Ok(Some(where_predicate)),
                         Err(e) => Err(Error::new_spanned(s, e)),
                     };
