@@ -1,7 +1,12 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenTree;
 use quote::{quote, ToTokens};
-use syn::{parse_macro_input, parse_quote, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, Error, Expr, ExprLit, Field, Fields, FieldsNamed, GenericArgument, GenericParam, Generics, Ident, Lit, Meta, MetaList, MetaNameValue, Path, PathArguments, PathSegment, Type, TypePath, WherePredicate};
+use syn::{
+    parse_macro_input, parse_quote, AngleBracketedGenericArguments, Attribute, Data, DataStruct,
+    DeriveInput, Error, Expr, ExprLit, Field, Fields, FieldsNamed, GenericArgument, GenericParam,
+    Generics, Ident, Lit, Meta, MetaList, MetaNameValue, Path, PathArguments, PathSegment, Type,
+    TypePath, WherePredicate,
+};
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -48,7 +53,6 @@ pub fn derive(input: TokenStream) -> TokenStream {
         })
         .collect::<Vec<_>>();
 
-    // List of associated types e.g `T::Value`
     let associated_types = binding
         .iter()
         .filter_map(|f| get_associated_types(&f.ty, &generic_types))
@@ -102,38 +106,43 @@ fn error_attr<T: ToTokens>(tokens: &T) -> Error {
 
 fn get_bound_attrs(attrs: Vec<Attribute>) -> Result<Option<syn::WherePredicate>, Error> {
     for attr in attrs {
-            if let Meta::List(MetaList { ref tokens, ref path, .. }) = attr.meta {
-                if let Some(PathSegment { ident, .. }) = path.segments.first() {
-                    if ident != "debug" {
-                        return Err(error_attr(ident));
-                    }
-                }
-
-                if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().nth(0) {
-                    if i != "bound" {
-                        return Err(error_attr(&attr.meta));
-                    }
-                }
-                match tokens.clone().into_iter().nth(1).unwrap() {
-                    TokenTree::Punct(p) => assert_eq!(p.as_char(), '='),
-                    tt => panic!("expected '=' found {}", tt),
-                }
-                let literal = match tokens.clone().into_iter().nth(2).unwrap() {
-                    TokenTree::Literal(l) => Lit::new(l),
-                    tt => panic!("found {}", tt),
-                };
-
-                match literal {
-                    Lit::Str(s) => {
-                        let value = s.value();
-                        return match syn::parse_str::<syn::WherePredicate>(&value) {
-                            Ok(where_predicate) => Ok(Some(where_predicate)),
-                            Err(e) => Err(Error::new_spanned(s, e)),
-                        }
-                    }
-                    _ => unimplemented!(),
+        if let Meta::List(MetaList {
+            ref tokens,
+            ref path,
+            ..
+        }) = attr.meta
+        {
+            if let Some(PathSegment { ident, .. }) = path.segments.first() {
+                if ident != "debug" {
+                    return Err(error_attr(ident));
                 }
             }
+
+            if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().nth(0) {
+                if i != "bound" {
+                    return Err(error_attr(&attr.meta));
+                }
+            }
+            match tokens.clone().into_iter().nth(1).unwrap() {
+                TokenTree::Punct(p) => assert_eq!(p.as_char(), '='),
+                tt => panic!("expected '=' found {}", tt),
+            }
+            let literal = match tokens.clone().into_iter().nth(2).unwrap() {
+                TokenTree::Literal(l) => Lit::new(l),
+                tt => panic!("found {}", tt),
+            };
+
+            match literal {
+                Lit::Str(s) => {
+                    let value = s.value();
+                    return match syn::parse_str::<syn::WherePredicate>(&value) {
+                        Ok(where_predicate) => Ok(Some(where_predicate)),
+                        Err(e) => Err(Error::new_spanned(s, e)),
+                    };
+                }
+                _ => unimplemented!(),
+            }
+        }
     }
 
     Ok(None)
