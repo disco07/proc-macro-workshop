@@ -125,7 +125,7 @@ fn get_attrs<'a>(field: &'a Field, attribute: &str) -> Option<&'a Attribute> {
 fn create_method(field: &Field, i: &Ident) -> proc_macro2::TokenStream {
     if let Some(Attribute { meta, .. }) = get_attrs(field, "builder") {
         if let Meta::List(MetaList { tokens, .. }) = meta {
-            if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().nth(0) {
+            if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().next() {
                 if i != "each" {
                     return syn::Error::new_spanned(&meta, "expected `builder(each = \"...\")`")
                         .to_compile_error();
