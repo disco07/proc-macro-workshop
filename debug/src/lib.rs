@@ -1,6 +1,7 @@
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{parse_macro_input, parse_quote, Attribute, Data, DataStruct, DeriveInput, Expr, ExprLit, Field, Fields, FieldsNamed, GenericParam, Generics, Ident, Lit, Meta, MetaNameValue, Path, PathSegment, Type, TypePath, PathArguments, AngleBracketedGenericArguments, GenericArgument};
+use proc_macro2::TokenTree;
+use quote::{quote, ToTokens};
+use syn::{parse_macro_input, parse_quote, AngleBracketedGenericArguments, Attribute, Data, DataStruct, DeriveInput, Error, Expr, ExprLit, Field, Fields, FieldsNamed, GenericArgument, GenericParam, Generics, Ident, Lit, Meta, MetaList, MetaNameValue, Path, PathArguments, PathSegment, Type, TypePath, WherePredicate};
 
 #[proc_macro_derive(CustomDebug, attributes(debug))]
 pub fn derive(input: TokenStream) -> TokenStream {
@@ -8,15 +9,21 @@ pub fn derive(input: TokenStream) -> TokenStream {
     // eprintln!("{:#?}", ast);
     let name = ast.ident;
     let fields = if let Data::Struct(DataStruct {
-                                         fields: Fields::Named(FieldsNamed { named, .. }),
-                                         ..
-                                     }) = ast.data
+        fields: Fields::Named(FieldsNamed { named, .. }),
+        ..
+    }) = ast.data
     {
         Some(named)
     } else {
         None
     };
     assert!(fields.is_some());
+    let attrs = ast.attrs;
+    let bound_res = get_bound_attrs(attrs);
+    if let Err(err) = bound_res {
+        return err.to_compile_error().into();
+    }
+    let bound_attr = bound_res.unwrap();
 
     let binding = fields.unwrap();
 
@@ -48,7 +55,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         .collect::<Vec<_>>();
 
     // Add a bound `T: std::fmt::Debug` to every type parameter T.
-    let generics = add_trait_bounds(ast.generics, phantom_ident, associated_types);
+    let generics = add_trait_bounds(ast.generics, phantom_ident, associated_types, bound_attr);
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let field = binding.iter().map(|f| {
@@ -73,9 +80,9 @@ pub fn derive(input: TokenStream) -> TokenStream {
 fn get_attrs<'a>(field: &'a Field, attrs: &str) -> Option<&'a Attribute> {
     while let Some(attr) = field.attrs.first() {
         if let Meta::NameValue(MetaNameValue {
-                                   path: Path { segments, .. },
-                                   ..
-                               }) = &attr.meta
+            path: Path { segments, .. },
+            ..
+        }) = &attr.meta
         {
             if let Some(PathSegment { ident, .. }) = segments.first() {
                 if ident != attrs {
@@ -89,14 +96,57 @@ fn get_attrs<'a>(field: &'a Field, attrs: &str) -> Option<&'a Attribute> {
     None
 }
 
+fn error_attr<T: ToTokens>(tokens: &T) -> Error {
+    Error::new_spanned(&tokens, "expected `builder(bound = \"...\")`")
+}
+
+fn get_bound_attrs(attrs: Vec<Attribute>) -> Result<Option<syn::WherePredicate>, Error> {
+    for attr in attrs {
+            if let Meta::List(MetaList { ref tokens, ref path, .. }) = attr.meta {
+                if let Some(PathSegment { ident, .. }) = path.segments.first() {
+                    if ident != "debug" {
+                        return Err(error_attr(ident));
+                    }
+                }
+
+                if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().nth(0) {
+                    if i != "bound" {
+                        return Err(error_attr(&attr.meta));
+                    }
+                }
+                match tokens.clone().into_iter().nth(1).unwrap() {
+                    TokenTree::Punct(p) => assert_eq!(p.as_char(), '='),
+                    tt => panic!("expected '=' found {}", tt),
+                }
+                let literal = match tokens.clone().into_iter().nth(2).unwrap() {
+                    TokenTree::Literal(l) => Lit::new(l),
+                    tt => panic!("found {}", tt),
+                };
+
+                match literal {
+                    Lit::Str(s) => {
+                        let value = s.value();
+                        return match syn::parse_str::<syn::WherePredicate>(&value) {
+                            Ok(where_predicate) => Ok(Some(where_predicate)),
+                            Err(e) => Err(Error::new_spanned(s, e)),
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+    }
+
+    Ok(None)
+}
+
 fn create_field(field: &Field, ident: &Ident) -> proc_macro2::TokenStream {
     let attr = get_attrs(field, "debug");
 
     if let Some(Attribute { meta, .. }) = attr {
         if let Meta::NameValue(MetaNameValue {
-                                   value: Expr::Lit(ExprLit { lit, .. }),
-                                   ..
-                               }) = meta
+            value: Expr::Lit(ExprLit { lit, .. }),
+            ..
+        }) = meta
         {
             match lit {
                 Lit::Str(s) => {
@@ -135,41 +185,53 @@ fn get_associated_types<'a>(ty: &'a Type, generic_types: &[&Ident]) -> Option<&'
 }
 
 // Add a bound `T:Debug` to every type parameter T.
-fn add_trait_bounds(mut generics: Generics, phantom_ident: Vec<&Ident>, associated_types: Vec<&TypePath>) -> Generics {
-    let associated_types_ident = associated_types
-        .iter()
-        .map(|ty| &ty.path.segments[0].ident)
-        .collect::<Vec<_>>();
-    for param in &mut generics.params {
-        if let GenericParam::Type(ref mut type_param) = *param {
-            // Do not add bound for Phantom types
-            if phantom_ident.contains(&&type_param.ident) {
-                continue;
+fn add_trait_bounds(
+    mut generics: Generics,
+    phantom_ident: Vec<&Ident>,
+    associated_types: Vec<&TypePath>,
+    bound_attr: Option<WherePredicate>,
+) -> Generics {
+    if let Some(where_predicate) = bound_attr {
+        generics
+            .make_where_clause()
+            .predicates
+            .push(where_predicate)
+    } else {
+        let associated_types_ident = associated_types
+            .iter()
+            .map(|ty| &ty.path.segments[0].ident)
+            .collect::<Vec<_>>();
+        for param in &mut generics.params {
+            if let GenericParam::Type(ref mut type_param) = *param {
+                // Do not add bound for Phantom types
+                if phantom_ident.contains(&&type_param.ident) {
+                    continue;
+                }
+                // Do not add bound for associated types
+                if associated_types_ident.contains(&&type_param.ident) {
+                    continue;
+                }
+                type_param.bounds.push(parse_quote!(::std::fmt::Debug));
             }
-            // Do not add bound for associated types
-            if associated_types_ident.contains(&&type_param.ident) {
-                continue;
-            }
-            type_param.bounds.push(parse_quote!(::std::fmt::Debug));
         }
-    }
 
-    if associated_types.len() > 0 {
         // Add trait Debug to clause where
-        let debug_trait = quote! { std::fmt::Debug };
         for associated_type in associated_types {
             generics
                 .make_where_clause()
                 .predicates
-                .push(syn::parse2(quote! { #associated_type :#debug_trait }).unwrap());
+                .push(syn::parse2(quote! { #associated_type: std::fmt::Debug }).unwrap());
         }
     }
-
     generics
 }
 
 fn ty_inner<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
-    if let Type::Path(TypePath { path: Path { segments, .. }, .. }) = ty {
+    if let Type::Path(TypePath {
+        path: Path { segments, .. },
+        ..
+    }) = ty
+    {
         if let Some(PathSegment { ident, arguments }) = segments.iter().next() {
             if ident != wrapper {
                 return None;
