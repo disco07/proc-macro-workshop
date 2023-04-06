@@ -101,7 +101,7 @@ fn get_attrs<'a>(field: &'a Field, attrs: &str) -> Option<&'a Attribute> {
 }
 
 fn error_attr<T: ToTokens>(tokens: &T) -> Error {
-    Error::new_spanned(&tokens, "expected `builder(bound = \"...\")`")
+    Error::new_spanned(tokens, "expected `builder(bound = \"...\")`")
 }
 
 fn get_bound_attrs(attrs: Vec<Attribute>) -> Result<Option<syn::WherePredicate>, Error> {
@@ -118,7 +118,7 @@ fn get_bound_attrs(attrs: Vec<Attribute>) -> Result<Option<syn::WherePredicate>,
                 }
             }
 
-            if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().nth(0) {
+            if let Some(TokenTree::Ident(i)) = tokens.clone().into_iter().next() {
                 if i != "bound" {
                     return Err(error_attr(&attr.meta));
                 }
@@ -151,21 +151,23 @@ fn get_bound_attrs(attrs: Vec<Attribute>) -> Result<Option<syn::WherePredicate>,
 fn create_field(field: &Field, ident: &Ident) -> proc_macro2::TokenStream {
     let attr = get_attrs(field, "debug");
 
-    if let Some(Attribute { meta, .. }) = attr {
-        if let Meta::NameValue(MetaNameValue {
-            value: Expr::Lit(ExprLit { lit, .. }),
-            ..
-        }) = meta
-        {
-            match lit {
-                Lit::Str(s) => {
-                    let t = s.token();
-                    return quote! {
-                        field(stringify!(#ident), &format_args!(#t, self.#ident))
-                    };
-                }
-                _ => unimplemented!(),
+    if let Some(Attribute {
+        meta:
+            Meta::NameValue(MetaNameValue {
+                value: Expr::Lit(ExprLit { lit, .. }),
+                ..
+            }),
+        ..
+    }) = attr
+    {
+        match lit {
+            Lit::Str(s) => {
+                let t = s.token();
+                return quote! {
+                    field(stringify!(#ident), &format_args!(#t, self.#ident))
+                };
             }
+            _ => unimplemented!(),
         }
     }
 
